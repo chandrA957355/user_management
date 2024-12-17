@@ -18,6 +18,7 @@ from builtins import Exception, range, str
 from datetime import timedelta
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+import uuid
 
 # Third-party imports
 import pytest
@@ -238,3 +239,14 @@ def email_service():
         mock_service.send_verification_email.return_value = None
         mock_service.send_user_email.return_value = None
         return mock_service
+
+@pytest.fixture
+def generate_unique_user():
+    """Generates a user dictionary with unique nickname and email."""
+    return {
+        "nickname": f"testuser_{uuid.uuid4().hex[:6]}",
+        "email": f"test_{uuid.uuid4().hex[:6]}@testmail.com",
+        "first_name": "Test",
+        "last_name": "Case",
+        "role": "AUTHENTICATED"
+    }

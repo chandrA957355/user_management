@@ -108,3 +108,43 @@ def test_user_base_url_invalid(url, user_base_data):
     user_base_data["profile_picture_url"] = url
     with pytest.raises(ValidationError):
         UserBase(**user_base_data)
+
+
+@pytest.mark.parametrize("invalid_password, error_message", [
+    ("weakpass", "Password must include at least one uppercase letter."),
+    ("SHORT1!", "Password must include at least one lowercase letter."),
+    ("noupper123!", "Password must include at least one uppercase letter."),
+    ("NOLOWER123!", "Password must include at least one lowercase letter."),
+    ("NoNumber!", "Password must include at least one number."),
+    ("NoSpecial123", "Password must include at least one special character"),
+])
+def test_user_creation_with_invalid_password(invalid_password, error_message, generate_unique_user):
+    """
+    Test that user creation raises ValidationError for invalid passwords.
+    """
+    user_data = generate_unique_user
+    user_data["password"] = invalid_password
+
+    with pytest.raises(ValidationError) as validation_error:
+        UserCreate(**user_data)
+    
+    assert error_message in str(validation_error.value)
+
+@pytest.fixture
+async def bulk_users_with_role(db_session):
+    """
+    Creates 50 users with the same role but unique email and nickname.
+    """
+    users_to_create = []
+    for _ in range(50):
+        users_to_create.append({
+            "nickname": f"user_{uuid.uuid4().hex[:6]}",
+            "email": f"user_{uuid.uuid4().hex[:6]}@example.com",
+            "first_name": "Bulk",
+            "last_name": "User",
+            "role": "AUTHENTICATED"
+        })
+    
+    db_session.add_all([UserCreate(**user) for user in users_to_create])
+    await db_session.commit()
+    return users_to_create
