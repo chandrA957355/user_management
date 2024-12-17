@@ -176,6 +176,11 @@ async def test_update_user_github(async_client, test_user, admin_token, db_sessi
     post_update = await async_client.get(f"/users/{test_user.id}", headers=headers)
     print("Post-Update User Data:", post_update.json())
 
+@pytest.mark.asyncio
+async def test_update_user_missing_fields(async_client, admin_user, admin_token):
+    headers = {"Authorization": f"Bearer {admin_token}"}
+    response = await async_client.put(f"/users/{admin_user.id}", json={}, headers=headers)
+    assert response.status_code == 422  # Unprocessable Entity
 
 @pytest.mark.asyncio
 async def test_update_user_linkedin(async_client, admin_user, admin_token):

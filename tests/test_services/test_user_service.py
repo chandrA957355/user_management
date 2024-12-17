@@ -155,6 +155,24 @@ async def test_verify_email_with_token(db_session, user):
     result = await UserService.verify_email_with_token(db_session, user.id, token)
     assert result is True
 
+@pytest.mark.asyncio
+async def test_verify_email_invalid_token(async_client, unverified_user, db_session):
+    invalid_token = "invalid_token_123"
+    response = await async_client.get(f"/verify-email/{unverified_user.id}/{invalid_token}")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired verification token"
+
+@pytest.mark.asyncio
+async def test_verify_email_with_expired_token(async_client, verified_user, db_session):
+    valid_token = "valid_token_example"
+    verified_user.verification_token = valid_token
+    verified_user.email_verified = True  # Mark user as already verified
+    await db_session.commit()
+
+    response = await async_client.get(f"/verify-email/{verified_user.id}/{valid_token}")
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Invalid or expired verification token"
+
 # Test unlocking a user's account
 async def test_unlock_user_account(db_session, locked_user):
     unlocked = await UserService.unlock_user_account(db_session, locked_user.id)
