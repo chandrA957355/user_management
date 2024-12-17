@@ -53,31 +53,26 @@ class UserService:
     async def create(cls, session: AsyncSession, user_data: Dict[str, str], email_service: EmailService) -> Optional[User]:
         try:
             validated_data = UserCreate(**user_data).model_dump()
-            existing_user = await cls.get_by_email(session, validated_data['email'])
-            if existing_user:
-                logger.error("User with given email already exists.")
-                return None
+            
+            # Check for duplicate email
+            if await cls.get_by_email(session, validated_data['email']):
+                raise ValueError("User with given email already exists.")
+            
+            # Check for duplicate nickname
+            if await cls.get_by_nickname(session, validated_data['nickname']):
+                raise ValueError("User with given nickname already exists.")
+
             validated_data['hashed_password'] = hash_password(validated_data.pop('password'))
             new_user = User(**validated_data)
-            new_nickname = generate_nickname()
-            while await cls.get_by_nickname(session, new_nickname):
-                new_nickname = generate_nickname()
-            new_user.nickname = new_nickname
-            logger.info(f"User Role: {new_user.role}")
-            user_count = await cls.count(session)
-            new_user.role = UserRole.ADMIN if user_count == 0 else UserRole.ANONYMOUS            
-            if new_user.role == UserRole.ADMIN:
-                new_user.email_verified = True
-
-            else:
-                new_user.verification_token = generate_verification_token()
-                await email_service.send_verification_email(new_user)
 
             session.add(new_user)
             await session.commit()
             return new_user
         except ValidationError as e:
-            logger.error(f"Validation error during user creation: {e}")
+            logger.error(f"Validation error: {e}")
+            return None
+        except ValueError as e:
+            logger.error(e)
             return None
 
     @classmethod
