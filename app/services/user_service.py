@@ -83,29 +83,40 @@ class UserService:
     @classmethod
     async def update(cls, session: AsyncSession, user_id: UUID, update_data: Dict[str, str]) -> Optional[User]:
         try:
-            # validated_data = UserUpdate(**update_data).dict(exclude_unset=True)
             validated_data = UserUpdate(**update_data).model_dump(exclude_unset=True)
-            existing_user = await cls.get_by_email(session, validated_data['email'])
-            if existing_user:
-                logger.error("User with given email already exists.")
-                return None
-            existing_user_nickname = await cls.get_by_nickname(session, validated_data['nickname'])
-            if existing_user_nickname:
-                logger.error("User with given nickname already exists.")
-                return None  
+
+            if 'email' in validated_data:
+                existing_user = await cls.get_by_email(session, validated_data['email'])
+                if existing_user and existing_user.id != user_id:
+                    logger.error("User with given email already exists.")
+                    return None
+
+            if 'nickname' in validated_data:
+                existing_user_nickname = await cls.get_by_nickname(session, validated_data['nickname'])
+                if existing_user_nickname and existing_user_nickname.id != user_id:
+                    logger.error("User with given nickname already exists.")
+                    return None
+                
             if 'password' in validated_data:
                 validated_data['hashed_password'] = hash_password(validated_data.pop('password'))
-            query = update(User).where(User.id == user_id).values(**validated_data).execution_options(synchronize_session="fetch")
+
+            query = (
+                update(User)
+                .where(User.id == user_id)
+                .values(**validated_data)
+                .execution_options(synchronize_session="fetch")
+            )
             await cls._execute_query(session, query)
+
             updated_user = await cls.get_by_id(session, user_id)
             if updated_user:
-                session.refresh(updated_user)  # Explicitly refresh the updated user object
+                session.refresh(updated_user)
                 logger.info(f"User {user_id} updated successfully.")
                 return updated_user
-            else:
-                logger.error(f"User {user_id} not found after update attempt.")
+
+            logger.error(f"User {user_id} not found after update attempt.")
             return None
-        except Exception as e:  # Broad exception handling for debugging
+        except Exception as e:
             logger.error(f"Error during user update: {e}")
             return None
 
