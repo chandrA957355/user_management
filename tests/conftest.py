@@ -252,6 +252,21 @@ def generate_unique_user():
     }
 
 @pytest.fixture
+def mock_email_service():
+    """
+    Provides a mocked instance of the email service for testing purposes.
+
+    The mock overrides the `send_email_verification` method to simulate successful email sending without performing any actual operation.
+
+    :return: A mocked email service instance.
+    """
+    mocked_service = AsyncMock()
+    mocked_service.send_email_verification = AsyncMock(return_value=True)
+    mocked_service.send_pro_promotion_email = AsyncMock(return_value=None)
+    return mocked_service
+
+
+@pytest.fixture
 async def test_user(db_session):
     """Fixture to create and return a test user."""
     user = User(
