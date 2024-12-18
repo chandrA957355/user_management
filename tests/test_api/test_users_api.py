@@ -5,6 +5,7 @@ import pytest
 from httpx import AsyncClient
 from app.main import app
 from app.models.user_model import User, UserRole
+from app.services.user_service import UserService
 from app.utils.nickname_gen import generate_nickname
 from app.utils.security import hash_password
 from app.services.jwt_service import decode_token
@@ -215,3 +216,68 @@ async def test_list_users_unauthorized(async_client, user_token):
         headers={"Authorization": f"Bearer {user_token}"}
     )
     assert response.status_code == 403  # Forbidden, as expected for regular user
+
+@pytest.mark.asyncio
+async def test_search_users_by_email(async_client: AsyncClient, db_session, admin_token, mock_email_service):
+    """
+    Test searching for a user by their email address.
+    """
+    # Arrange: Create a user with a specific email
+    user_data = {
+        "nickname": "emailuser",
+        "email": "emailsearch@example.com",
+        "password": "SecurePassword123!",
+        "role": "AUTHENTICATED"
+    }
+    created_user = await UserService.create(db_session, user_data, mock_email_service)
+
+    # Act: Perform a search query by email
+    response = await async_client.get(
+        "/users/search/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        params={"email": created_user.email}
+    )
+
+    # Assert: Verify that the correct user is returned
+    assert response.status_code == 200
+    response_data = response.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["email"] == created_user.email
+    assert response_data["items"][0]["nickname"] == created_user.nickname
+
+
+@pytest.mark.asyncio
+async def test_search_users_by_role(async_client: AsyncClient, db_session, admin_token, mock_email_service):
+    """
+    Test searching for users by their role.
+    """
+    # Arrange: Create users with different roles
+    admin_user = {
+        "nickname": "admin_user",
+        "email": "admin@example.com",
+        "password": "SecurePassword123!",
+        "role": "ADMIN"
+    }
+    auth_user = {
+        "nickname": "authuser",
+        "email": "authrole@example.com",
+        "password": "SecurePassword123!",
+        "role": "AUTHENTICATED"
+    }
+    await UserService.create(db_session, admin_user, mock_email_service)
+    await UserService.create(db_session, auth_user, mock_email_service)
+
+    # Act: Search for users with the ADMIN role
+    response = await async_client.get(
+        "/users/search/",
+        headers={"Authorization": f"Bearer {admin_token}"},
+        params={"role": "ADMIN"}
+    )
+
+    # Assert: Verify only the ADMIN user is returned
+    assert response.status_code == 200
+    response_data = response.json()
+    assert len(response_data["items"]) == 1
+    assert response_data["items"][0]["role"] == "ADMIN"
+    assert response_data["items"][0]["email"] == admin_user["email"]
+    assert response_data["items"][0]["nickname"] == admin_user["nickname"]
