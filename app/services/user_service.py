@@ -8,7 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.dependencies import get_email_service, get_settings
 from app.models.user_model import User
-from app.schemas.user_schemas import UserCreate, UserUpdate
+from app.schemas.user_schemas import UserCreate, UserResponse, UserUpdate
 from app.utils.nickname_gen import generate_nickname
 from app.utils.security import generate_verification_token, hash_password, verify_password
 from uuid import UUID
@@ -114,6 +114,82 @@ class UserService:
         except Exception as e:
             logger.error(f"Error during user update: {e}")
             return None
+        
+    @classmethod
+    async def search_users(
+        cls,
+        session: AsyncSession,
+        username: Optional[str] = None,
+        email: Optional[str] = None,
+        first_name: Optional[str] = None,
+        last_name: Optional[str] = None,
+        role: Optional[str] = None,
+        account_status: Optional[str] = None,
+        registration_date_from: Optional[datetime] = None,
+        registration_date_to: Optional[datetime] = None,
+        skip: int = 0,
+        limit: int = 10
+    ) -> List[UserResponse]:
+        """
+        Searches for users in the database based on provided filters. Supports filtering by username, email, 
+        name, role, account status, and registration date range. Includes pagination.
+
+        :param session: Active database session.
+        :param username: Filter by username (case-insensitive).
+        :param email: Filter by email (case-insensitive).
+        :param first_name: Filter by first name (case-insensitive).
+        :param last_name: Filter by last name (case-insensitive).
+        :param role: Filter by user role.
+        :param account_status: "active" or "locked" to filter by account status.
+        :param registration_date_from: Start date for registration date range filter.
+        :param registration_date_to: End date for registration date range filter.
+        :param skip: Number of records to skip for pagination.
+        :param limit: Maximum number of records to return for pagination.
+        :return: List of UserResponse objects matching the filters.
+        """
+        query = select(User)
+
+        # Create filters dynamically
+        if username:
+            query = query.filter(func.lower(User.nickname) == func.lower(username))
+        if email:
+            query = query.filter(func.lower(User.email) == func.lower(email))
+        if first_name:
+            query = query.filter(func.lower(User.first_name) == func.lower(first_name))
+        if last_name:
+            query = query.filter(func.lower(User.last_name) == func.lower(last_name))
+        if role:
+            query = query.filter(User.role == role)
+        if account_status:
+            is_locked = account_status.lower() == "locked"
+            query = query.filter(User.is_locked == is_locked)
+        if registration_date_from:
+            query = query.filter(User.created_at >= registration_date_from)
+        if registration_date_to:
+            query = query.filter(User.created_at <= registration_date_to)
+
+        # Apply pagination
+        query = query.offset(skip).limit(limit)
+
+        # Execute the query
+        result = await cls._execute_query(session, query)
+        users = result.scalars().all() if result else []
+
+        # Map to response schema
+        user_responses = [
+            UserResponse(
+                id=user.id,
+                email=user.email,
+                nickname=user.nickname,
+                is_professional=user.is_professional,
+                role=user.role,
+                registration_date=user.created_at,
+                account_status="Active" if not user.is_locked else "Locked"
+            )
+            for user in users
+        ]
+
+        return user_responses
 
     @classmethod
     async def delete(cls, session: AsyncSession, user_id: UUID) -> bool:
